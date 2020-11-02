@@ -6,13 +6,12 @@ alphaVantage-api
 bayesian-optimization
 seaborn
 sqlalchemy
-tensorflow-gpu
 networkx
-git+https://github.com/notadamking/tensortrade.git
-keras
 stochastic
 plotly
 ccxt
 
+ionomy-python
+td-ameritrade-python-api
 deap
 a
