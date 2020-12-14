@@ -5,9 +5,9 @@
   "python.linting.banditEnabled": false,
   "python.linting.pycodestyleEnabled": false,
   "python.autoComplete.extraPaths": [
-    "${workspaceFolder}/controller"
+    "${workspaceFolder}/src"
   ],
   "python.analysis.extraPaths": [
-    "${workspaceFolder}/controller"
+    "${workspaceFolder}/src"
   ]
 }
