@@ -1,20 +1,32 @@
 version: '3.7'
 services:
-    # ngrok:
-    #     build: ./ngrok
-    #     container_name: ngrok
-    #     restart: unless-stopped
-    #     command: /bin/sh -c "ngrok authtoken ${ngrok_auth} && ngrok http notebook_server:8888 -subdomain=distortedlogic"
-    notebook-server:
+    chad-jupyter:
         build:
             context: .
             dockerfile: Dockerfile
-        container_name: notebook_server
+        container_name: chad-jupyter
         restart: unless-stopped
         command: jupyter lab
+        labels:
+            - traefik.enable=true
+            - traefik.http.routers.chad.rule=Host(`chad.localhost`)
+            - traefik.http.routers.chad.entrypoints=unsecure
+            - traefik.http.services.chad.loadbalancer.server.port=8888
         volumes:
             - .:/notebooks
         env_file:
             - ./.env
         ports:
-            - 8888:8888
+            - 8889:8888
+    findata:
+        image: postgres:13-alpine
+        container_name: findata
+        restart: on-failure
+        volumes:
+        - findata:/var/lib/postgresql/data
+        env_file:
+        - ./shared.env
+        ports:
+        - 4325:5432
+volumes:
+    findata:

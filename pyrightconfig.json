@@ -4,11 +4,11 @@
   "exclude": ["**/node_modules", "**/__pycache__", "src/typestubs"],
   "useLibraryCodeForTypes": true,
   "typeCheckingMode": "off",
-  "venvPath": "C:\\Users\\jerme\\anaconda3\\envs\\mmc",
+  "venvPath": "C:\\Users\\jerme\\anaconda3\\envs\\chad",
 
   "reportMissingImports": true,
   "reportMissingTypeStubs": false,
 
-  "pythonVersion": "3.6",
+  "pythonVersion": "3.8",
   "pythonPlatform": "Linux"
 }
