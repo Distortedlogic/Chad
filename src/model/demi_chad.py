@@ -1,0 +1,2 @@
+class DemiChad:
+    pass

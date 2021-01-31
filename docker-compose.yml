@@ -18,15 +18,5 @@ services:
             - ./.env
         ports:
             - 8889:8888
-    findata:
-        image: postgres:13-alpine
-        container_name: findata
-        restart: on-failure
-        volumes:
-        - findata:/var/lib/postgresql/data
-        env_file:
-        - ./shared.env
-        ports:
-        - 4325:5432
 volumes:
     findata:
