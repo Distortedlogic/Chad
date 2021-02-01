@@ -4,7 +4,7 @@ import random
 
 from deap import algorithms, base, creator, gp, tools
 from deap.gp import Ephemeral
-from src import MAX_IND_SIZE
+from src import DEBUG, EXPR_MAX, EXPR_MIN, MAX_IND_SIZE
 from src.model.functions.build_pset import build_pset
 from src.model.utils.mutInsert import mutInsert
 from src.model.utils.mutNodeReplacement import mutNodeReplacement
@@ -41,14 +41,17 @@ def load_toolbox():
     )
 
     toolbox = base.Toolbox()
-    toolbox.register("map", multiprocessing.Pool().map)
+    if DEBUG:
+        toolbox.register("map", map)
+    else:
+        toolbox.register("map", multiprocessing.Pool().map)
     toolbox.register("imap", multiprocessing.Pool().imap)
     toolbox.register(
         "expr",
         generate_safe,
         pset=pset,
-        min_=5,
-        max_=10,
+        min_=EXPR_MIN,
+        max_=EXPR_MAX,
         terminal_types=terminal_types,
     )
     toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.expr)
@@ -92,4 +95,4 @@ def load_toolbox():
         "mutEphemeral_rand",
         gp.staticLimit(key=operator.attrgetter("height"), max_value=MAX_IND_SIZE),
     )
-    return pset, toolbox
+    return toolbox, pset

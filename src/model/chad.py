@@ -1,17 +1,20 @@
+from time import time
+
 import IPython
 import pandas as pd
 from deap import gp
+from src import MAX_TRADE_AMOUNT, MIN_NUM_TRADES
 from src.model.functions.calc import calc_sqn, opp_type
 
 
 class Chad:
-    def __init__(self, pset, df, max_trade_amount):
+    def __init__(self, pset, df):
         self.pset = pset
         self.df = df
-        self.hof_log = pd.DataFrame()
-        self.max_trade_amount = max_trade_amount
 
     def fitness(self, individual):
+        now = time()
+        self.individual = individual
         history = pd.DataFrame(
             columns=[
                 "entry",
@@ -24,19 +27,24 @@ class Chad:
             ]
         )
         position = 0
-        signals = gp.compile(individual, self.pset)(self.df)
+        signals, min_hold = gp.compile(individual, self.pset)(self.df)
         for time_index, row in signals.iterrows():
-            amount = row["close"] * self.max_trade_amount
+            amount = row["close"] * MAX_TRADE_AMOUNT
             if row["buy"] and self.can_trade(position):
-                position += self.max_trade_amount
+                position += MAX_TRADE_AMOUNT
                 history = self.update_history(history, "long", time_index, amount)
             elif row["sell"] and self.can_trade(position):
-                position -= self.max_trade_amount
+                position -= MAX_TRADE_AMOUNT
                 history = self.update_history(history, "short", time_index, amount)
         history = history[history["closed"] == True]
-        if len(history) < 30 or history.empty or history["revenue"].std() == 0:
-            return (-99999 + len(history),)
         self.history = history
+        self.runtime = time() - now
+        if (
+            len(history) < MIN_NUM_TRADES
+            or history.empty
+            or history["revenue"].std() == 0
+        ):
+            return (-99999 + len(history),)
         return (calc_sqn(history),)
 
     @staticmethod
@@ -74,20 +82,35 @@ class Chad:
 
     def print_results(self):
         history = self.history
-        self.hof_log = self.hof_log.append(
-            dict(
-                avg_hold_time=history["exit_time"].sub(history["entry_time"]).mean(),
-                roi=history["revenue"].sum() / history["entry"].sum(),
-                num_trades=len(history),
-                total_revenue=history["revenue"].sum(),
-                percent_good=len(history[history["revenue"] > 0]) / len(history),
-                percent_long=len(history[history["type"] == "long"]) / len(history),
-                best_trade=history["revenue"].max(),
-                worst_trade=history["revenue"].min(),
-                sum_pos=history.loc[history["revenue"] > 0, "revenue"].sum(),
-                sum_neg=history.loc[history["revenue"] < 0, "revenue"].sum(),
-            ),
-            ignore_index=True,
-        )
         with pd.option_context("display.max_rows", None, "display.max_columns", None):
-            IPython.display.display(self.hof_log[-1:])
+            IPython.display.display(
+                pd.DataFrame.from_records([dict(ind_size=len(self.individual))])
+            )
+
+        with pd.option_context("display.max_rows", None, "display.max_columns", None):
+            IPython.display.display(
+                pd.DataFrame.from_records(
+                    [
+                        dict(
+                            avg_hold_time=history["exit_time"]
+                            .sub(history["entry_time"])
+                            .mean(),
+                            roi=history["revenue"].sum() / history["entry"].sum(),
+                            num_trades=len(history),
+                            total_revenue=history["revenue"].sum(),
+                            percent_good=len(history[history["revenue"] > 0])
+                            / len(history),
+                            percent_long=len(history[history["type"] == "long"])
+                            / len(history),
+                            best_trade=history["revenue"].max(),
+                            worst_trade=history["revenue"].min(),
+                            sum_pos=history.loc[
+                                history["revenue"] > 0, "revenue"
+                            ].sum(),
+                            sum_neg=history.loc[
+                                history["revenue"] < 0, "revenue"
+                            ].sum(),
+                        )
+                    ]
+                )
+            )

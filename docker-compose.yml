@@ -18,5 +18,3 @@ services:
             - ./.env
         ports:
             - 8889:8888
-volumes:
-    findata:

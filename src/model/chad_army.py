@@ -1,12 +1,12 @@
 from IPython.core.display import clear_output
-from src import NGEN
+from src import FRESH, NGEN, TOURNAMENT_SIZE
 from src.model.chad import Chad
 from src.model.functions.display import (
     graph,
     plot_ec,
     plot_trades,
     print_history,
-    profit_bar,
+    revenue_bars,
 )
 from src.model.functions.model_funcs import checkpoint_cp, load_cp
 from src.model.functions.population import standard_step
@@ -20,31 +20,34 @@ class ChadArmy:
         self.toolbox, self.pset = load_toolbox()
         self.chad = Chad(self.pset, df)
         self.toolbox.register("evaluate", self.chad.fitness)
-        self.cp = load_cp(self.toolbox, self.stats)
+        self.cp = load_cp(self.toolbox, self.stats, FRESH)
 
     def war(self):
         for self.gen in range(1, NGEN + 1):
             self.cp["pop"] = standard_step(self.toolbox, self.cp["pop"])
-            self.cp["pop"] = self.toolbox.selDoubleTournament(
-                self.cp["pop"],
-                len(self.cp["pop"]),
-                fitness_size=len(self.cp["pop"]) // 5,
-            )
-            self.cp["halloffame"].update(self.cp["pop"])
+            if NGEN % 5 == 0:
+                self.cp["pop"] = self.toolbox.selDoubleTournament(
+                    self.cp["pop"], self.cp["pop_size"], fitness_size=TOURNAMENT_SIZE,
+                )
+            else:
+                self.cp["pop"] = self.toolbox.selTournament(
+                    self.cp["pop"], self.cp["pop_size"], TOURNAMENT_SIZE
+                )
+            self.cp["hall_of_fame"].update(self.cp["pop"])
             self.log()
             checkpoint_cp(self.cp)
 
     def log(self):
-        self.logbook.record(
+        self.cp["logbook"].record(
             gen=self.gen, **self.stats.compile(self.cp["pop"]),
         )
-        print(self.logbook.stream)
+        print(self.cp["logbook"].stream)
 
     def print_stats(self):
-        self.chad.fitness(self.halloffame[0])
+        self.chad.fitness(self.cp["hall_of_fame"][0])
         clear_output()
-        plot_ec(self.chad.history)
-        profit_bar(self.chad.history)
-        plot_trades(self.df["closed"], self.chad.history)
-        graph(self.halloffame[0])
+        self.chad.print_results()
+        revenue_bars(self.chad.history)
+        plot_trades(self.chad.df["close"], self.chad.history)
+        graph(self.cp["hall_of_fame"][0])
         print_history(self.chad.history)

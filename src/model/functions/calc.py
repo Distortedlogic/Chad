@@ -1,6 +1,8 @@
 def calc_sqn(history):
-    mean_profit = history["profit"].mean()
-    std_profit = history["profit"].std()
+    q = history["revenue"].quantile(0.95)
+    history = history[history["revenue"] < q]
+    mean_profit = history["revenue"].mean()
+    std_profit = history["revenue"].std()
     root_num_trades = len(history) ** 0.5
     amplifier = (
         root_num_trades / std_profit

@@ -24,14 +24,14 @@ def build_pset():
     add_slope_rule(pset)
 
     terminal_types = (
-        operator_terminals +
-        filter_terminals +
-        rsi_terminals +
-        ema_terminals +
-        price_terminals +
-        macd_terminals +
-        slope_terminals
-        )
+        operator_terminals
+        + filter_terminals
+        + rsi_terminals
+        + ema_terminals
+        + price_terminals
+        + macd_terminals
+        + slope_terminals
+    )
 
     return pset, terminal_types
 

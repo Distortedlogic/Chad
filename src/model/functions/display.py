@@ -2,6 +2,7 @@ import IPython
 import matplotlib.pyplot as plt
 import networkx as nx
 import pandas as pd
+from deap import gp
 from networkx.drawing.nx_agraph import graphviz_layout
 
 
@@ -9,29 +10,30 @@ def print_history(history):
     with pd.option_context("display.max_rows", None, "display.max_columns", None):
         IPython.display.display(history)
 
-def profit_bar(history):
-    profits = history.loc[history["closed"], "profit"]
-    lower = int(profits.mean() - 3 * profits.std())
-    upper = int(profits.mean() + 3 * profits.std())
-    step = int(profits.std()) // 3
+
+def revenue_bars(history):
+    revenue = history.loc[history["closed"], "revenue"]
+    lower = int(revenue.mean() - 3 * revenue.std())
+    upper = int(revenue.mean() + 3 * revenue.std())
+    step = int(revenue.std()) // 3
     bins = sorted(list(range(lower, upper, step)) + [0])
-    cuts = pd.cut(profits, bins=bins, include_lowest=True, duplicates="drop")
+    cuts = pd.cut(revenue, bins=bins, include_lowest=True, duplicates="drop")
     ax = cuts.value_counts(sort=False).plot.bar(rot=0, color="b", figsize=(15, 5))
     plt.xticks(rotation=90)
-    plt.savefig("profit_bar.png")
+    # plt.savefig("revenue_bar.png")
     plt.show()
 
 
 def plot_ec(history):
     fig = plt.figure(figsize=(15, 5))
-    equity = history.loc[history["closed"], "profit"].cumsum()
+    equity = history.loc[history["closed"], "revenue"].cumsum()
     plt.plot(equity)
     plt.savefig("equity_curve.png")
     plt.show()
 
 
 def graph(ind):
-    plt.rcParams["figure.figsize"] = (150, 40)
+    plt.rcParams["figure.figsize"] = (150, 100)
 
     nodes, edges, labels = gp.graph(ind)
     g = nx.Graph()
@@ -39,9 +41,9 @@ def graph(ind):
     g.add_edges_from(edges)
     pos = graphviz_layout(g)
 
-    nx.draw_networkx_nodes(g, pos, node_size=20000, node_color="grey")
+    nx.draw_networkx_nodes(g, pos, node_size=200000, node_color="grey")
     nx.draw_networkx_edges(g, pos)
-    nx.draw_networkx_labels(g, pos, labels, font_size=50)
+    nx.draw_networkx_labels(g, pos, labels, font_size=100)
     plt.savefig("graph.png")
     plt.show()
 
