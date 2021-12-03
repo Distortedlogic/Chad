@@ -1,57 +1,72 @@
 import random
+from typing import Any, Callable, ClassVar, Dict, List, Type, cast
 
-import pandas as pd
 import pandas_ta as ta
 from pandas.core.frame import DataFrame
+from pandas.core.series import Series
+from src.rules.ret_types import FilterableSeries
 
-from .ret_types import bool_series, filterable_series
-
-
-class rsi_length:
-    pass
+from .base_rule import BaseRule, BaseTerminal, Offset
 
 
-class rsi_drift:
-    pass
+class RSILength(BaseTerminal):
+    func: ClassVar[Callable[..., Any]] = random.randint
+    lower: ClassVar[int]
+    upper: ClassVar[int]
+
+    @classmethod
+    def ranges(cls):
+        return [{"lower": 1, "upper": 1000}]
 
 
-class rsi_offset:
-    pass
+class RSIDrift(BaseTerminal):
+    func: ClassVar[Callable[..., Any]] = random.randint
+    lower: ClassVar[int]
+    upper: ClassVar[int]
+
+    @classmethod
+    def ranges(cls):
+        return [{"lower": 1, "upper": 10}]
 
 
-class rsi_lower:
-    pass
+class RSILower(BaseTerminal):
+    func: ClassVar[Callable[..., Any]] = random.randint
+    lower: ClassVar[int]
+    upper: ClassVar[int]
+
+    @classmethod
+    def ranges(cls):
+        return [{"lower": 10, "upper": 40}]
 
 
-class rsi_upper:
-    pass
+class RSIUpper(BaseTerminal):
+    func: ClassVar[Callable[..., Any]] = random.randint
+    lower: ClassVar[int]
+    upper: ClassVar[int]
+
+    @classmethod
+    def ranges(cls):
+        return [{"lower": 60, "upper": 90}]
 
 
-rsi_terminals = [rsi_length, rsi_drift, rsi_offset, rsi_lower, rsi_upper]
+class RSIRule(BaseRule):
+    @staticmethod
+    def get_base_terminals() -> List[Type[BaseTerminal]]:
+        return [RSILength, RSIDrift, Offset, RSILower, RSIUpper]
+
+    @staticmethod
+    def get_primitive_data() -> List[Dict[str, Any]]:
+        return [{"func": rsi_lt, "inputs": [DataFrame, "RSILength", "RSIDrift", "Offset", "RSILower"], "output":FilterableSeries},
+                {"func": rsi_gt, "inputs": [DataFrame, "RSILength", "RSIDrift", "Offset", "RSIUpper"], "output":FilterableSeries}]
 
 
-def rsi_lt(df, length, drift, offset, threshold):
-    return df.ta.rsi(length=length, drift=drift, offset=offset) < threshold
+def rsi_(df: DataFrame, length: int, drift: int, offset: int):
+    return cast(Series, df.ta.rsi(length=length, drift=drift, offset=offset))
 
 
-def rsi_gt(df, length, drift, offset, threshold):
-    return df.ta.rsi(length=length, drift=drift, offset=offset) > threshold
+def rsi_lt(df: DataFrame, length: int, drift: int, offset: int, threshold: float):
+    return rsi_(df, length=length, drift=drift, offset=offset) < threshold
 
 
-def add_rsi_rule(pset):
-    pset.addEphemeralConstant("rsi_length", lambda: random.randint(1, 1000), rsi_length)
-    pset.addEphemeralConstant("rsi_drift", lambda: random.randint(0, 10), rsi_drift)
-    pset.addEphemeralConstant("rsi_offset", lambda: random.randint(0, 10), rsi_offset)
-    pset.addEphemeralConstant("rsi_lower", lambda: random.randint(10, 40), rsi_lower)
-    pset.addEphemeralConstant("rsi_upper", lambda: random.randint(60, 90), rsi_upper)
-
-    pset.addPrimitive(
-        rsi_lt,
-        [DataFrame, rsi_length, rsi_drift, rsi_offset, rsi_lower],
-        filterable_series,
-    )
-    pset.addPrimitive(
-        rsi_gt,
-        [DataFrame, rsi_length, rsi_drift, rsi_offset, rsi_upper],
-        filterable_series,
-    )
+def rsi_gt(df: DataFrame, length: int, drift: int, offset: int, threshold: float):
+    return rsi_(df, length=length, drift=drift, offset=offset) > threshold

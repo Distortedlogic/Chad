@@ -1,64 +1,62 @@
 import random
+from typing import Any, Callable, ClassVar, Dict, List, Type, cast
 
 import pandas_ta as ta
 from pandas.core.frame import DataFrame
+from pandas.core.series import Series
 
-from .ret_types import bool_series, comparable_series, filterable_series
-
-
-class slope_length:
-    pass
+from .base_rule import BaseRule, BaseTerminal, Offset
+from .ret_types import FilterableSeries
 
 
-class slope_offset:
-    pass
+class SlopeLength(BaseTerminal):
+    func: ClassVar[Callable[..., Any]] = random.randint
+    lower: ClassVar[int]
+    upper: ClassVar[int]
+
+    @classmethod
+    def ranges(cls):
+        return [{"lower": 1, "upper": 1000}]
 
 
-class slope_upper:
-    pass
+class SlopeUpper(BaseTerminal):
+    func: ClassVar[Callable[..., Any]] = random.uniform
+    lower: ClassVar[int]
+    upper: ClassVar[int]
+
+    @classmethod
+    def ranges(cls):
+        return [{"lower": 0, "upper": 100}]
 
 
-class slope_lower:
-    pass
+class SlopeLower(BaseTerminal):
+    func: ClassVar[Callable[..., Any]] = random.uniform
+    lower: ClassVar[int]
+    upper: ClassVar[int]
+
+    @classmethod
+    def ranges(cls):
+        return [{"lower": -100, "upper": 0}]
 
 
-slope_terminals = [slope_length, slope_offset, slope_upper, slope_lower]
+class SlopeRule(BaseRule):
+    @staticmethod
+    def get_base_terminals() -> List[Type[BaseTerminal]]:
+        return [SlopeLength, Offset, SlopeUpper, SlopeLower]
+
+    @staticmethod
+    def get_primitive_data() -> List[Dict[str, Any]]:
+        return [{"func": slope_lt, "inputs": [DataFrame, "SlopeLength", "Offset", "SlopeLower"], "output":FilterableSeries},
+                {"func": slope_gt, "inputs": [DataFrame, "SlopeLength", "Offset", "SlopeUpper"], "output":FilterableSeries}]
 
 
-def slope(u, slope_length, slope_offset):
-    return u.ta.slope(slope_length, slope_offset)
+def slope_(df: DataFrame, slope_length: int, slope_offset: int):
+    return cast(Series, df.ta.slope(slope_length, slope_offset))
 
 
-def slope_gt(u, slope_length, slope_offset, slope_upper):
-    return u.ta.slope(slope_length, slope_offset) > slope_upper
+def slope_gt(u: DataFrame, slope_length: int, slope_offset: int, slope_upper: float):
+    return slope_(u, slope_length, slope_offset) > slope_upper
 
 
-def slope_lt(u, slope_length, slope_offset, slope_lower):
-    return u.ta.slope(slope_length, slope_offset) < slope_lower
-
-
-def add_slope_rule(pset):
-    pset.addEphemeralConstant(
-        "slope_length", lambda: random.randint(0, 1000), slope_length
-    )
-    pset.addEphemeralConstant(
-        "slope_offset", lambda: random.randint(0, 10), slope_offset
-    )
-
-    pset.addEphemeralConstant(
-        "slope_lower", lambda: random.uniform(-100, 0), slope_lower
-    )
-    pset.addEphemeralConstant(
-        "slope_upper", lambda: random.uniform(0, 100), slope_upper
-    )
-
-    pset.addPrimitive(
-        slope_lt,
-        [DataFrame, slope_length, slope_offset, slope_lower],
-        filterable_series,
-    )
-    pset.addPrimitive(
-        slope_gt,
-        [DataFrame, slope_length, slope_offset, slope_upper],
-        filterable_series,
-    )
+def slope_lt(u: DataFrame, slope_length: int, slope_offset: int, slope_lower: float):
+    return slope_(u, slope_length, slope_offset) < slope_lower

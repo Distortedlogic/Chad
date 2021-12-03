@@ -1,20 +1,20 @@
-version: '3.7'
+version: "3.7"
 services:
-    chad-jupyter:
-        build:
-            context: .
-            dockerfile: Dockerfile
-        container_name: chad-jupyter
-        restart: unless-stopped
-        command: jupyter lab
-        labels:
-            - traefik.enable=true
-            - traefik.http.routers.chad.rule=Host(`chad.localhost`)
-            - traefik.http.routers.chad.entrypoints=unsecure
-            - traefik.http.services.chad.loadbalancer.server.port=8888
-        volumes:
-            - .:/notebooks
-        env_file:
-            - ./.env
-        ports:
-            - 8889:8888
+  chad-jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chad-jupyter
+    restart: unless-stopped
+    command: jupyter lab
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.chad.rule=Host(`chad.localhost`)
+      - traefik.http.routers.chad.entrypoints=unsecure
+      - traefik.http.services.chad.loadbalancer.server.port=8888
+    volumes:
+      - .:/notebooks
+    env_file:
+      - ./.env
+    ports:
+      - 8888:8888

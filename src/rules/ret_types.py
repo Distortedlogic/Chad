@@ -1,21 +1,20 @@
-import pandas
 
 
-class signals:
+class Signals:
     pass
 
 
-class bool_series:
+class BoolSeries:
     pass
 
 
-class not_able_series(bool_series):
+class NotAbleSeries(BoolSeries):
     pass
 
 
-class comparable_series:
+class ComparableSeries:
     pass
 
 
-class filterable_series:
+class FilterableSeries:
     pass

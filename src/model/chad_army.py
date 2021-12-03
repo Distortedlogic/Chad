@@ -1,53 +1,82 @@
+
+from typing import Optional
+
+from arrow import now
 from IPython.core.display import clear_output
-from src import FRESH, NGEN, TOURNAMENT_SIZE
+from src import DEBUG, FRESH, LOG_BEST_EVERY, NGEN, TOURNAMENT_SIZE
+from src.api.dataframe import display_df, graph, plot_trades, revenue_bars
 from src.model.chad import Chad
-from src.model.functions.display import (
-    graph,
-    plot_ec,
-    plot_trades,
-    print_history,
-    revenue_bars,
-)
-from src.model.functions.model_funcs import checkpoint_cp, load_cp
-from src.model.functions.population import standard_step
-from src.model.functions.stats import load_stats
-from src.model.functions.toolbox import load_toolbox
+from src.model.checkpoint import Checkpoint
+from src.model.individual import Individual
+from src.model.logbook import Logbook
+from src.model.toolbox import ToolBox
 
 
 class ChadArmy:
-    def __init__(self, df):
-        self.stats = load_stats()
-        self.toolbox, self.pset = load_toolbox()
-        self.chad = Chad(self.pset, df)
-        self.toolbox.register("evaluate", self.chad.fitness)
-        self.cp = load_cp(self.toolbox, self.stats, FRESH)
+    def __init__(self):
+        keypress = input("clear checkpoint save?")
+        if keypress == "y":
+            Checkpoint.clear()
+        self.cp = Checkpoint.load(FRESH)
+        self.cp.now = now()
+        self.logbook = Logbook.load(self.cp.uuid)
+        self.chad = Chad(**self.cp.chad_kwargs)
+        self.toolbox = ToolBox(evaluate=self.chad.fitness, **self.cp.toolbox_kwargs)
+        if FRESH:
+            self.logbook.clear_book(self.cp.uuid)
+            self.cp.num_changed = self.toolbox.evaluate_pop(self.cp.population)
+            _ = self.cp.hall_of_fame.update(self.cp.population)
+        self.log()
+        self.stats_checker: Optional[str] = None
 
     def war(self):
-        for self.gen in range(1, NGEN + 1):
-            self.cp["pop"] = standard_step(self.toolbox, self.cp["pop"])
-            if NGEN % 5 == 0:
-                self.cp["pop"] = self.toolbox.selDoubleTournament(
-                    self.cp["pop"], self.cp["pop_size"], fitness_size=TOURNAMENT_SIZE,
-                )
+        for self.cp.generation in range(self.cp.generation + 1, NGEN + 1):
+            self.prev_population = self.cp.population
+            self.cp.population, self.cp.num_changed = self.toolbox.standard_step(self.cp.population)
+            self.post_round_process()
+            if DEBUG:
+                self.print_stats()
+                start_awaiting_input_time = now()
+                keypress = input("'s' for select")
+                self.cp.now += now()-start_awaiting_input_time
+                if keypress != "s":
+                    continue
+            if self.cp.generation % LOG_BEST_EVERY == 0:
+                self.print_stats()
+                if self.stats_checker != "q":
+                    start_awaiting_input_time = now()
+                    self.stats_checker = input("press key to continue, q - run forever")
+                    self.cp.now += now()-start_awaiting_input_time
+            if self.cp.generation % 5 == 0:
+                self.cp.population = self.toolbox.selDoubleTournament(self.cp.population, self.cp.pop_size, TOURNAMENT_SIZE)
             else:
-                self.cp["pop"] = self.toolbox.selTournament(
-                    self.cp["pop"], self.cp["pop_size"], TOURNAMENT_SIZE
-                )
-            self.cp["hall_of_fame"].update(self.cp["pop"])
-            self.log()
-            checkpoint_cp(self.cp)
+                self.cp.population = self.toolbox.selTournament(self.cp.population, self.cp.pop_size, TOURNAMENT_SIZE)
 
     def log(self):
-        self.cp["logbook"].record(
-            gen=self.gen, **self.stats.compile(self.cp["pop"]),
-        )
-        print(self.cp["logbook"].stream)
+        self.logbook.log(self.cp)
+        self.logbook.display(clear=not DEBUG)
+        self.logbook.save()
+
+    def post_round_process(self):
+        self.cp.hall_of_fame.update(self.cp.population)
+        self.cp.checkpoint()
+        self.log()
 
     def print_stats(self):
-        self.chad.fitness(self.cp["hall_of_fame"][0])
-        clear_output()
+        if not DEBUG:
+            clear_output()
+        else:
+            if self.prev_population == self.cp.population:
+                print("Population did not change")
+        best: Individual = self.cp.hall_of_fame[0]
+        graph(best)
+        _ = self.chad.fitness(best)
+        history = self.chad.history
+        close = self.chad.close
+        if len(history) == 0:
+            print("no trades made")
+            return
         self.chad.print_results()
-        revenue_bars(self.chad.history)
-        plot_trades(self.chad.df["close"], self.chad.history)
-        graph(self.cp["hall_of_fame"][0])
-        print_history(self.chad.history)
+        revenue_bars(history)
+        plot_trades(close, history)
+        display_df(history)

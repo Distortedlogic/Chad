@@ -1,59 +1,70 @@
 import random
+from typing import Any, Callable, ClassVar, Dict, List, Type, cast
 
-import pandas as pd
 import pandas_ta as ta
 from pandas.core.frame import DataFrame
+from pandas.core.series import Series
+from src.rules.ret_types import ComparableSeries, FilterableSeries
 
-from .ret_types import bool_series, comparable_series, filterable_series
-
-
-class ema_length:
-    pass
+from .base_rule import BaseRule, BaseTerminal, Offset
 
 
-class ema_offset:
-    pass
+class EMALength(BaseTerminal):
+    func: ClassVar[Callable[..., Any]] = random.randint
+    lower: ClassVar[int]
+    upper: ClassVar[int]
+
+    @classmethod
+    def ranges(cls):
+        return [{"lower": 1, "upper": 1000}]
 
 
-class ema_lower:
-    pass
+class EMALower(BaseTerminal):
+    func: ClassVar[Callable[..., Any]] = random.uniform
+    lower: ClassVar[int]
+    upper: ClassVar[int]
+
+    @classmethod
+    def ranges(cls):
+        return [{"lower": -1, "upper": 0}]
 
 
-class ema_upper:
-    pass
+class EMAUpper(BaseTerminal):
+    func: ClassVar[Callable[..., Any]] = random.uniform
+    lower: ClassVar[int]
+    upper: ClassVar[int]
+
+    @classmethod
+    def ranges(cls):
+        return [{"lower": 0, "upper": 1}]
 
 
-ema_terminals = [ema_length, ema_offset, ema_lower, ema_upper]
+class EMARule(BaseRule):
+    @staticmethod
+    def get_base_terminals() -> List[Type[BaseTerminal]]:
+        return [EMALength, Offset, EMALower, EMAUpper]
+
+    @staticmethod
+    def get_primitive_data() -> List[Dict[str, Any]]:
+        return [{"func": ema_, "inputs": [DataFrame, "EMALength", "Offset"], "output":ComparableSeries},
+                {"func": ema_lt, "inputs": [DataFrame, "EMALength", "Offset", "EMALower"], "output":FilterableSeries},
+                {"func": ema_gt, "inputs": [DataFrame, "EMALength", "Offset", "EMAUpper"], "output":FilterableSeries}]
 
 
-def ema(df, length, offset):
-    return df.ta.ema(length=length, offset=offset)
+def ema_(df: DataFrame, length: int, offset: int):
+    return cast(Series, df.ta.ema(length=length, offset=offset))
 
 
-def ema_lt(df, length, offset, ema_lower):
-    ema = df.ta.ema(length=length, offset=offset)
+def ema_diff(df: DataFrame, length: int, offset: int):
     prices = df["close"]
-    diff = prices.sub(ema).divide(prices)
-    return (diff < ema_lower).astype(int)
+    ema_series = ema_(df, length=length, offset=offset)
+    subtracted = cast(Series, prices.subtract(ema_series))
+    return subtracted.divide(prices)
 
 
-def ema_gt(df, length, offset, ema_upper):
-    ema = df.ta.ema(length=length, offset=offset)
-    prices = df["close"]
-    diff = prices.sub(ema).divide(prices)
-    return diff > ema_upper
+def ema_lt(df: DataFrame, length: int, offset: int, ema_lower: float):
+    return ema_diff(df, length, offset) < ema_lower
 
 
-def add_ema_rule(pset):
-    pset.addEphemeralConstant("ema_length", lambda: random.randint(1, 1000), ema_length)
-    pset.addEphemeralConstant("ema_offset", lambda: random.randint(0, 10), ema_offset)
-    pset.addPrimitive(ema, [DataFrame, ema_length, ema_offset], comparable_series)
-
-    pset.addEphemeralConstant("ema_lower", lambda: random.uniform(-0.01, 0), ema_lower)
-    pset.addEphemeralConstant("ema_upper", lambda: random.uniform(0, 0.01), ema_upper)
-    pset.addPrimitive(
-        ema_lt, [DataFrame, ema_length, ema_offset, ema_lower], filterable_series
-    )
-    pset.addPrimitive(
-        ema_gt, [DataFrame, ema_length, ema_offset, ema_upper], filterable_series
-    )
+def ema_gt(df: DataFrame, length: int, offset: int, ema_upper: float):
+    return ema_diff(df, length, offset) > ema_upper

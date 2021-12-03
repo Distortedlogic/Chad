@@ -1,116 +1,132 @@
+from dataclasses import dataclass
 from time import time
+from typing import Any, Callable, Dict, List, Literal, Tuple, Union, cast
 
-import IPython
-import pandas as pd
 from deap import gp
-from src import MAX_TRADE_AMOUNT, MIN_NUM_TRADES
-from src.model.functions.calc import calc_sqn, opp_type
+from deap.gp import PrimitiveSetTyped
+from pandas.core.frame import DataFrame
+from pandas.core.series import Series
+from src.api.dataframe import calc_sqn, display_df, load_ohlcv_df
+from src.model.individual import Individual
+
+Side = Union[Literal["buy"], Literal["sell"]]
 
 
+def opp_side(side: Side):
+    if side == "sell":
+        return "buy"
+    elif side == "buy":
+        return "sell"
+    raise Exception("bad side")
+
+
+@dataclass
 class Chad:
-    def __init__(self, pset, df):
-        self.pset = pset
-        self.df = df
+    pairs: List[Tuple[str, str]]
+    timeframe: str
+    limit: int
+    position_bound: float
+    max_trade_amount: float
+    min_num_trades: int
+    pset: PrimitiveSetTyped
 
-    def fitness(self, individual):
+    def __post_init__(self):
+        self.dfs = [load_ohlcv_df(pair[0], pair[1], tf=self.timeframe, limit=self.limit)for pair in self.pairs]
+
+    @property
+    def close(self):
+        close = self.dfs[0]["close"]
+        for df in self.dfs[1:]:
+            close = close.append(df["close"], ignore_index=True).reset_index(drop=True)
+        return close
+
+    @classmethod
+    def get_default_history(cls):
+        return DataFrame(columns=["entry",
+                                  "exit",
+                                  "type",
+                                  "closed",
+                                  "entry_time",
+                                  "exit_time",
+                                  "revenue"])
+
+    def fitness(self, individual: Individual):
         now = time()
         self.individual = individual
-        history = pd.DataFrame(
-            columns=[
-                "entry",
-                "exit",
-                "type",
-                "closed",
-                "entry_time",
-                "exit_time",
-                "revenue",
-            ]
-        )
+        self.history = self.get_default_history()
+        compiled: Callable[..., Tuple[DataFrame, int]] = gp.compile(individual, self.pset)
         position = 0
-        signals, min_hold = gp.compile(individual, self.pset)(self.df)
-        for time_index, row in signals.iterrows():
-            amount = row["close"] * MAX_TRADE_AMOUNT
-            if row["buy"] and self.can_trade(position):
-                position += MAX_TRADE_AMOUNT
-                history = self.update_history(history, "long", time_index, amount)
-            elif row["sell"] and self.can_trade(position):
-                position -= MAX_TRADE_AMOUNT
-                history = self.update_history(history, "short", time_index, amount)
-        history = history[history["closed"] == True]
-        self.history = history
+        for df in self.dfs:
+            signals, _ = compiled(df)
+            for time_index, row in cast(List[Tuple[int, Series]], signals.iterrows()):
+                if row["buy"] and row["sell"]:
+                    continue
+                if row["buy"] and position < self.position_bound:
+                    position += self.max_trade_amount
+                    side = "buy"
+                elif row["sell"] and position > -self.position_bound:
+                    position -= self.max_trade_amount
+                    side = "sell"
+                else:
+                    continue
+                amount: float = row["close"] * self.max_trade_amount
+                self.update_history(side, time_index, amount)
+            self.history = self.history[self.history["closed"] == True]
         self.runtime = time() - now
-        if (
-            len(history) < MIN_NUM_TRADES
-            or history.empty
-            or history["revenue"].std() == 0
-        ):
-            return (-99999 + len(history),)
-        return (calc_sqn(history),)
+        if len(self.history) < self.min_num_trades or self.history["revenue"].std() == 0:
+            return (-99999 + len(self.history),)
+        return (calc_sqn(self.history),)
 
-    @staticmethod
-    def can_trade(position):
-        return position > -1.1 and position < 1.1
+    def all_positions_closed(self, side: Side):
+        type = "long" if opp_side(side) == "buy" else "sell"
+        return self.history.loc[self.history["type"] == type, "closed"].all()
 
-    @staticmethod
-    def update_history(history, type, time_index, trade_amount):
-        if (
-            history.empty
-            or history.loc[history["type"] == opp_type(type), "closed"].all()
-        ):
-            history = history.append(
-                dict(
-                    entry_time=time_index,
-                    entry=trade_amount,
-                    type=type,
-                    closed=False,
-                    exit=None,
-                    exit_time=None,
-                    revenue=None,
-                ),
-                ignore_index=True,
-            )
+    def close_a_position(self, side: Side, time_index: int, trade_amount: float):
+        position_type = "long" if opp_side(side) == "buy" else "short"
+        mask = (self.history["type"] == position_type) & (self.history["closed"] == False)
+        idx: int = self.history[mask].index[0]
+        self.history.loc[idx, "closed"] = True
+        self.history.loc[idx, "exit"] = trade_amount
+        self.history.loc[idx, "exit_time"] = time_index
+        entry = cast(float, self.history.iloc[idx]["entry"])
+        revenue: float = trade_amount - entry
+        self.history.loc[idx, "revenue"] = revenue if position_type == "long" else -revenue
+
+    def update_history(self, side: Side, time_index: int, trade_amount: float):
+        if self.history.empty or self.all_positions_closed(side):
+            self.history = self.history.append(dict(entry_time=time_index,
+                                                    entry=trade_amount,
+                                                    type="long" if side == "buy" else "short",
+                                                    closed=False,
+                                                    exit=None,
+                                                    exit_time=None,
+                                                    revenue=None),
+                                               ignore_index=True)
         else:
-            mask = (history["type"] == opp_type(type)) & (history["closed"] == False)
-            idx = history[mask].index[0]
-            history.loc[idx, "closed"] = True
-            history.loc[idx, "exit"] = trade_amount
-            history.loc[idx, "exit_time"] = time_index
-            trade = history.iloc[idx]
-            long_rev = trade_amount - trade["entry"]
-            history.loc[idx, "revenue"] = long_rev if type == "long" else -long_rev
-        return history
+            self.close_a_position(side, time_index, trade_amount)
 
     def print_results(self):
+        if len(self.history) == 0:
+            print("no trades made")
+            return
         history = self.history
-        with pd.option_context("display.max_rows", None, "display.max_columns", None):
-            IPython.display.display(
-                pd.DataFrame.from_records([dict(ind_size=len(self.individual))])
-            )
-
-        with pd.option_context("display.max_rows", None, "display.max_columns", None):
-            IPython.display.display(
-                pd.DataFrame.from_records(
-                    [
-                        dict(
-                            avg_hold_time=history["exit_time"]
-                            .sub(history["entry_time"])
-                            .mean(),
-                            roi=history["revenue"].sum() / history["entry"].sum(),
-                            num_trades=len(history),
-                            total_revenue=history["revenue"].sum(),
-                            percent_good=len(history[history["revenue"] > 0])
-                            / len(history),
-                            percent_long=len(history[history["type"] == "long"])
-                            / len(history),
-                            best_trade=history["revenue"].max(),
-                            worst_trade=history["revenue"].min(),
-                            sum_pos=history.loc[
-                                history["revenue"] > 0, "revenue"
-                            ].sum(),
-                            sum_neg=history.loc[
-                                history["revenue"] < 0, "revenue"
-                            ].sum(),
-                        )
-                    ]
-                )
-            )
+        display_df(DataFrame.from_records([dict(ind_size=len(self.individual))]))
+        hold_times = cast(Series, history["exit_time"].sub(history["entry_time"]))
+        revenue = history["revenue"]
+        total_revenue = revenue.sum()
+        total_cost = history["entry"].sum()
+        good_trades = history.loc[revenue > 0, "revenue"]
+        bad_trades = history.loc[revenue < 0, "revenue"]
+        long_trades = history[history["type"] == "long"]
+        num_trades = len(history)
+        data: Dict[str, Any] = dict(avg_hold_time=hold_times.mean(),
+                                    roi=total_revenue / total_cost,
+                                    num_trades=num_trades,
+                                    total_revenue=total_revenue,
+                                    percent_good=len(good_trades) / num_trades,
+                                    percent_long=len(long_trades) / num_trades,
+                                    best_trade=revenue.max(),
+                                    worst_trade=revenue.min(),
+                                    sum_pos=good_trades.sum(),
+                                    sum_neg=bad_trades.sum())
+        display_df(DataFrame.from_records([data]))

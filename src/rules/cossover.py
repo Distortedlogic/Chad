@@ -1,63 +1,67 @@
 import random
+from typing import Any, Callable, ClassVar, Dict, List, Type
 
-import pandas as pd
 import pandas_ta as ta
 from pandas.core.frame import DataFrame
+from pandas.core.series import Series
 
-from .ret_types import bool_series, comparable_series, not_able_series
-
-
-class macd_fast:
-    pass
+from .base_rule import BaseRule, BaseTerminal, Offset
+from .ret_types import ComparableSeries, NotAbleSeries
 
 
-class macd_slow:
-    pass
+class MACDFast(BaseTerminal):
+    func: ClassVar[Callable[..., Any]] = random.randint
+    lower: ClassVar[int]
+    upper: ClassVar[int]
+
+    @classmethod
+    def ranges(cls):
+        return [{"lower": 1, "upper": 1000}]
 
 
-class macd_signal:
-    pass
+class MACDSlow(BaseTerminal):
+    func: ClassVar[Callable[..., Any]] = random.randint
+    lower: ClassVar[int]
+    upper: ClassVar[int]
+
+    @classmethod
+    def ranges(cls):
+        return [{"lower": 1, "upper": 1000}]
 
 
-class macd_offset:
-    pass
+class MACDSignal(BaseTerminal):
+    func: ClassVar[Callable[..., Any]] = random.randint
+    lower: ClassVar[int]
+    upper: ClassVar[int]
+
+    @classmethod
+    def ranges(cls):
+        return [{"lower": 1, "upper": 1000}]
 
 
-macd_terminals = [macd_fast, macd_slow, macd_signal, macd_offset]
+class MACDRule(BaseRule):
+    @staticmethod
+    def get_base_terminals() -> List[Type[BaseTerminal]]:
+        return [MACDFast, MACDSlow, MACDSignal, Offset]
+
+    @staticmethod
+    def get_primitive_data() -> List[Dict[str, Any]]:
+        return [{"func": crossover, "inputs": [ComparableSeries, ComparableSeries], "output":NotAbleSeries},
+                {"func": macd_crossover, "inputs": [DataFrame, "MACDFast", "MACDSlow", "MACDSignal", "Offset"], "output":NotAbleSeries}]
 
 
-def crossover(u, v):
+def crossover(u: Series, v: Series):
     neg = u.le(v)
     pos = u.gt(v)
     return pos.shift(1) & neg
 
 
-def macd_crossover(df, macd_fast, macd_slow, macd_signal, macd_offset):
+def macd_crossover(df: DataFrame, macd_fast: int, macd_slow: int, macd_signal: int, macd_offset: int):
     if macd_fast > macd_slow:
         macd_fast, macd_slow = macd_slow, macd_fast
     elif macd_fast == macd_slow:
         macd_slow += 1
-    macd_full = df.ta.macd(
-        fast=macd_fast, slow=macd_slow, signal=macd_signal, offset=macd_offset
-    )
+    macd_full: DataFrame = df.ta.macd(fast=macd_fast, slow=macd_slow, signal=macd_signal, offset=macd_offset)
     macdh = macd_full.iloc[:, 1]
-
-    return crossover(macdh, 0)
-
-
-def add_crossover_rule(pset):
-    pset.addPrimitive(
-        crossover, [comparable_series, comparable_series], not_able_series
-    )
-
-    pset.addEphemeralConstant("macd_fast", lambda: random.randint(1, 1000), macd_fast)
-    pset.addEphemeralConstant("macd_slow", lambda: random.randint(1, 1000), macd_slow)
-    pset.addEphemeralConstant(
-        "macd_signal", lambda: random.randint(1, 1000), macd_signal
-    )
-    pset.addEphemeralConstant("macd_offset", lambda: random.randint(0, 10), macd_offset)
-    pset.addPrimitive(
-        macd_crossover,
-        [DataFrame, macd_fast, macd_slow, macd_signal, macd_offset],
-        not_able_series,
-    )
+    zeros = Series(0, index=len(macdh))
+    return crossover(macdh, zeros)
